@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test EmbiggenEye</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>EmbiggenEye Test Page</h1>
+    
+    <div class="test-section">
+        <h2>File Check</h2>
+        <div id="fileCheck">Checking files...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Feature Data Test</h2>
+        <div id="featureTest">Loading features...</div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Quick Links</h2>
+        <p><a href="index.html" target="_blank">Open Main Interface</a></p>
+        <p><a href="features_part1.json" target="_blank">View Features Part 1 (first 100 lines)</a></p>
+    </div>
+
+    <script>
+        // Test file existence
+        async function testFiles() {
+            const files = ['index.html', 'app.js', 'styles.css', 'features_part1.json'];
+            const fileCheck = document.getElementById('fileCheck');
+            let results = '';
+            
+            for (const file of files) {
+                try {
+                    const response = await fetch(file);
+                    if (response.ok) {
+                        results += `<div class="success">✓ ${file} - OK</div>`;
+                    } else {
+                        results += `<div class="error">✗ ${file} - Error ${response.status}</div>`;
+                    }
+                } catch (error) {
+                    results += `<div class="error">✗ ${file} - ${error.message}</div>`;
+                }
+            }
+            fileCheck.innerHTML = results;
+        }
+        
+        // Test feature loading
+        async function testFeatures() {
+            const featureTest = document.getElementById('featureTest');
+            try {
+                const response = await fetch('features_part1.json');
+                if (response.ok) {
+                    const data = await response.json();
+                    featureTest.innerHTML = `
+                        <div class="success">✓ Features loaded successfully</div>
+                        <div class="info">Total features: ${data.length}</div>
+                        <div class="info">Sample feature: ${JSON.stringify(data[0], null, 2)}</div>
+                    `;
+                } else {
+                    featureTest.innerHTML = `<div class="error">✗ Failed to load features: ${response.status}</div>`;
+                }
+            } catch (error) {
+                featureTest.innerHTML = `<div class="error">✗ Error loading features: ${error.message}</div>`;
+            }
+        }
+        
+        // Run tests
+        testFiles();
+        testFeatures();
+    </script>
+</body>
+</html>
