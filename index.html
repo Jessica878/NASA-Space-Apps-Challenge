@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EmbiggenEye — Explorer</title>
+
+  <!-- App CSS -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Leaflet + MarkerCluster CSS (no SRI to avoid blocking) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+
+  <!-- Icons (optional) -->
+  <link rel="stylesheet" href="https://unpkg.com/feather-icons/dist/feather.min.css" />
+
+  <style>
+    /* Safety - ensures map is visible even if styles.css fails to load */
+    html,body { height: 100%; margin: 0; background: #0b0e16; }
+    main { display: grid; grid-template-columns: 300px 1fr 320px; gap: 12px; height: calc(100% - 120px); padding: 12px; box-sizing: border-box; }
+    #map { width: 100%; height: 100%; min-height: 480px; border-radius: 8px; overflow: hidden; }
+    .topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 16px; background:linear-gradient(90deg,#071025 0%, #0b1320 100%); color:#fff; gap:12px; }
+    .leftpanel, .rightpanel { overflow:auto; }
+    /* loader (hidden by default) */
+    #loader { position: fixed; left: 12px; top: 72px; padding: 8px 12px; background: rgba(0,0,0,0.6); color: #fff; border-radius: 8px; z-index: 2000; display: none; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand" style="display:flex;align-items:center;gap:10px;">
+        <img src="static/logo.png" alt="EmbiggenEye" class="logo" onerror="this.style.display='none'" style="height:40px"/>
+        <div>
+          <div style="font-weight:700;font-size:18px">EmbiggenEye</div>
+          <div style="font-size:12px;color:#bcd">Lunar crater water-likelihood explorer</div>
+        </div>
+      </div>
+
+      <div class="controls" style="display:flex;align-items:center;gap:8px;">
+        <div class="search" style="display:flex;gap:6px;">
+          <input id="searchInput" placeholder="Search crater name or id..." aria-label="Search" style="padding:6px 8px;border-radius:6px;border:none;min-width:220px" />
+          <button id="searchBtn" class="btn ghost">Search</button>
+        </div>
+
+        <div class="actions" style="display:flex;gap:6px;margin-left:8px;">
+          <button id="suggestBtn" class="btn">Suggest</button>
+          <button id="exportBtn" class="btn ghost">Export</button>
+          <button id="helpBtn" class="btn ghost">Help</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <aside class="leftpanel card" style="padding:12px;">
+        <div class="panel-section">
+          <h4>Layers</h4>
+          <div class="layers">
+            <label><input type="radio" name="layer" value="vis" checked> Visible</label><br/>
+            <label><input type="radio" name="layer" value="ir"> Infrared</label><br/>
+            <label><input type="radio" name="layer" value="elev"> Elevation</label><br/>
+            <label><input type="radio" name="layer" value="index"> Water Index</label>
+          </div>
+          
+          <div class="layer-controls" style="margin-top: 12px;">
+            <h5>Layer Controls</h5>
+            <div class="opacity-control">
+              <label>Opacity: <span id="opacityValue">100%</span></label>
+              <input type="range" id="opacitySlider" min="0" max="100" value="100" style="width: 100%; margin-top: 4px;">
+              <small style="color: var(--color-muted); font-size: 11px;">Drag to adjust layer transparency</small>
+            </div>
+            <div class="blend-control" style="margin-top: 8px;">
+              <label>Blend Mode:</label>
+              <select id="blendMode" style="width: 100%; margin-top: 4px; padding: 4px; background: var(--color-panel); color: var(--color-text); border: 1px solid #2a3142; border-radius: 4px;">
+                <option value="normal">Normal</option>
+                <option value="multiply">Multiply</option>
+                <option value="screen">Screen</option>
+                <option value="overlay">Overlay</option>
+                <option value="difference">Difference</option>
+              </select>
+              <small style="color: var(--color-muted); font-size: 11px;">Change how layers blend together</small>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section" style="margin-top:12px;">
+          <h4>Legend</h4>
+          <div class="legend">
+            <div class="legend-section">
+              <h6>Water Score</h6>
+              <div class="legend-row"><span class="swatch low" style="display:inline-block;width:18px;height:12px;background:#2b6cff;margin-right:8px"></span> Low (0.0-0.3)</div>
+              <div class="legend-row"><span class="swatch mid" style="display:inline-block;width:18px;height:12px;background:#ffd166;margin-right:8px"></span> Medium (0.3-0.7)</div>
+              <div class="legend-row"><span class="swatch high" style="display:inline-block;width:18px;height:12px;background:#ff6b6b;margin-right:8px"></span> High (0.7-1.0)</div>
+            </div>
+            
+            <div class="legend-section" style="margin-top: 12px;">
+              <h6>Layer Types</h6>
+              <div class="legend-row"><span class="swatch" style="display:inline-block;width:18px;height:12px;background:#888;margin-right:8px"></span> Visible Light</div>
+              <div class="legend-row"><span class="swatch" style="display:inline-block;width:18px;height:12px;background:#ff4444;margin-right:8px"></span> Infrared</div>
+              <div class="legend-row"><span class="swatch" style="display:inline-block;width:18px;height:12px;background:#4444ff;margin-right:8px"></span> Elevation</div>
+              <div class="legend-row"><span class="swatch" style="display:inline-block;width:18px;height:12px;background:#44ff44;margin-right:8px"></span> Water Index</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section" style="margin-top:12px;">
+          <h4>Annotations</h4>
+          <div id="annotationsList">None yet</div>
+        </div>
+
+        <footer class="panel-footer" style="margin-top:12px">
+          <small>Enhanced interface with real NASA data: IR (Diviner), Elevation (LOLA), and Water Index (Mini-RF). Use opacity and blend controls for advanced analysis.</small>
+          <br><small style="color: #00ff00;">✓ Real NASA data from USGS Astrogeology servers</small>
+        </footer>
+      </aside>
+
+      <section id="mapContainer">
+        <div id="map"></div>
+      </section>
+
+      <aside class="rightpanel card" style="padding:12px;">
+        <div id="featureDetails" class="feature-details">
+          <div class="empty">Click a crater to view details</div>
+        </div>
+        
+        <div id="craterInfo" class="crater-info" style="display: none;">
+          <h4>Crater Information</h4>
+          <div class="info-section">
+            <h6>Basic Properties</h6>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">Name:</span>
+                <span class="value" id="craterName">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">ID:</span>
+                <span class="value" id="craterId">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Diameter:</span>
+                <span class="value" id="craterDiameter">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Depth:</span>
+                <span class="value" id="craterDepth">—</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h6>Scientific Data</h6>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">Water Score:</span>
+                <span class="value" id="waterScore">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">PSR Overlap:</span>
+                <span class="value" id="psrOverlap">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Spectral Mean:</span>
+                <span class="value" id="spectralMean">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Hydrogen Mean:</span>
+                <span class="value" id="hydrogenMean">—</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h6>Location</h6>
+            <div class="info-grid">
+              <div class="info-item">
+                <span class="label">Latitude:</span>
+                <span class="value" id="craterLat">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Longitude:</span>
+                <span class="value" id="craterLon">—</span>
+              </div>
+              <div class="info-item">
+                <span class="label">Coordinates:</span>
+                <span class="value" id="craterCoords">—</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h6>Analysis</h6>
+            <div class="analysis-content" id="craterAnalysis">
+              <p>Click on a crater to see detailed analysis and water likelihood assessment.</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <div id="toast" class="toast" aria-live="polite" role="status"></div>
+    <div id="loader">Loading features…</div>
+
+    <footer class="bottombar" style="padding:10px 16px;background:#06121a;color:#9fb;">
+      <div>EmbiggenEye • Enhanced Interface — IR, Elevation, Water Index Layers</div>
+      <div class="small">Tip: Click crater markers for detailed information, use layer controls for analysis</div>
+    </footer>
+  </div>
+
+  <!-- Leaflet and plugins (scripts loaded in correct order) -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
+  <!-- Your app (must come after Leaflet) -->
+  <script src="app.js"></script>
+
+  <noscript>
+    <div style="position:fixed;left:12px;bottom:12px;padding:8px;background:#fffa;backdrop-filter:blur(4px);border-radius:8px;">
+      JavaScript is required to view the map. Please enable JS and reload the page.
+    </div>
+  </noscript>
+</body>
+</html>
